@@ -1,0 +1,41 @@
+{
+    "inputs": [
+        {
+            "id": "oracle-password",
+            "type": "promptString",
+            "description": "Oracle DB Password",
+            "password": true
+        },
+        {
+            "id": "mssql-password",
+            "type": "promptString",
+            "description": "MSSQL DB Password",
+            "password": true
+        }
+    ],
+    "servers": {
+        "zemcp-oracle": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["@zemcp/oracle"],
+            "env": {
+                "DB_USER": "sys",
+                "DB_PASSWORD": "${input:oracle-password}",
+                "DB_CONNECT_STRING": "localhost:1521/XEPDB1",
+                "DB_PRIVILEGE": "SYSDBA"
+            }
+        },
+        "zemcp-mssql": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["@zemcp/mssql"],
+            "env": {
+                "DB_HOST" : "localhost",
+                "DB_PORT" : "1433",
+                "DB_NAME" : "master",
+                "DB_USER" : "sa",
+                "DB_PASSWORD" : "${input:mssql-password}"
+            }
+        }
+    }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "zemcp",
+  "version": "1.0.0",
+  "description": "Cool MCP servers",
+  "private": true,
+  "workspaces": [
+    "zemcp-mssql",
+    "zemcp-oracle"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "version:patch": "npm version patch --workspaces",
+    "version:minor": "npm version minor --workspaces",
+    "version:major": "npm version major --workspaces"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "database",
+    "mssql",
+    "oracle"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aziouiz/zemcp.git"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "jest": "^29.7.0"
+  }
+}
