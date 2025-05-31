@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import mssql from "mssql";
+import pino from "pino";
 
 const server = new McpServer({
     name: "zemcp-mssql",
@@ -18,24 +19,33 @@ const user = process.env.DB_USER;
 const password = process.env.DB_PASSWORD;
 const port = parseInt(process.env.DB_PORT);
 const database = process.env.DB_NAME;
-const disableValidation = process.env.DISABLE_VALIDATION === 'true';
+const enableValidation = process.env.ENABLE_VALIDATION === 'true';
 const debugSql = process.env.DEBUG_SQL === 'true';
+const logFile = process.env.LOG_FILE;
+
+const streams = [{ stream: process.stdout }];
+if (logFile) {
+    streams.push({ stream: pino.destination(logFile) });
+}
+const logger = pino({ level: 'info' }, pino.multistream(streams));
 
 if (!serverHost || !user || !password || !port || !database) {
-    console.error("Missing required environment variables: DB_HOST, DB_USER, DB_PASSWORD, DB_PORT, DB_NAME");
+    logger.error("Missing required environment variables: DB_HOST, DB_USER, DB_PASSWORD, DB_PORT, DB_NAME");
     process.exit(1);
 }
 
-// Log validation status on startup
-if (disableValidation) {
-    console.warn("⚠️  WARNING: SQL validation is DISABLED. Dangerous operations are allowed!");
-} else {
-    console.log("✅ SQL validation is enabled for safety");
+if (logFile) {
+    logger.info(`📝 File logging enabled: ${logFile}`);
 }
 
-// Log debug status on startup
+if (enableValidation) {
+    logger.info("✅ SQL validation is enabled for safety");
+} else {
+    logger.warn("⚠️  WARNING: SQL validation is DISABLED by default. Set ENABLE_VALIDATION=true to enable safety checks!");
+}
+
 if (debugSql) {
-    console.log("🐛 DEBUG_SQL is enabled - SQL requests and responses will be logged");
+    logger.info("🐛 DEBUG_SQL is enabled - SQL requests and responses will be logged");
 }
 
 const config = {
@@ -49,14 +59,25 @@ const config = {
         trustServerCertificate: true,
     },
     pool: {
-        max: 5,
-        min: 0,
-        idleTimeoutMillis: 60000,
-        acquireTimeoutMillis: 15000,
-        createTimeoutMillis: 15000,
-        destroyTimeoutMillis: 5000,
+        max: parseInt(process.env.DB_POOL_MAX) || 10,
+        min: parseInt(process.env.DB_POOL_MIN) || 2,
+        idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT) || 30000,
+        acquireTimeoutMillis: parseInt(process.env.DB_POOL_ACQUIRE_TIMEOUT) || 15000,
+        createTimeoutMillis: parseInt(process.env.DB_POOL_CREATE_TIMEOUT) || 15000,
+        destroyTimeoutMillis: parseInt(process.env.DB_POOL_DESTROY_TIMEOUT) || 5000,
     },
 };
+
+let globalPool = null;
+
+async function getPool() {
+    if (!globalPool) {
+        logger.info("Creating connection pool...");
+        globalPool = await mssql.connect(config);
+        logger.info("Connection pool created successfully!");
+    }
+    return globalPool;
+}
 
 const DANGEROUS_PATTERNS = [
     /\bDROP\s+DATABASE\b/i,
@@ -102,7 +123,7 @@ async function validateSqlSyntax(sql, pool) {
         if (prepareError.message.includes('Incorrect syntax near') ||
             prepareError.message.includes('Invalid column name') ||
             prepareError.message.includes('Invalid object name')) {
-            console.warn('Syntax validation warning:', prepareError.message);
+            logger.warn('Syntax validation warning: ' + prepareError.message);
         }
     }
 }
@@ -174,21 +195,18 @@ server.tool(
         const queryWithoutSemiColumn = query.trim().slice(0, -1);
 
         if (debugSql) {
-            console.log("🐛 DEBUG: Received SQL query:");
-            console.log(queryWithoutSemiColumn);
+            logger.info("🐛 DEBUG: Received SQL query:");
+            logger.info(queryWithoutSemiColumn);
         }
 
         if (!queryWithoutSemiColumn) {
             throw new Error('Missing required parameters');
         }
 
-        let pool;
         try {
-            console.log("Attempting to connect to SQL Server...");
-            pool = await mssql.connect(config);
-            console.log("Connected successfully!");
+            const pool = await getPool();
 
-            if (!disableValidation) {
+            if (enableValidation) {
                 await validateQuery(queryWithoutSemiColumn, pool);
             }
 
@@ -197,8 +215,8 @@ server.tool(
             const resultString = JSON.stringify(result.recordset, null, 2);
             
             if (debugSql) {
-                console.log("🐛 DEBUG: MSSQL query response:");
-                console.log(resultString);
+                logger.info("🐛 DEBUG: MSSQL query response:");
+                logger.info(resultString);
             }
 
             return {
@@ -210,16 +228,8 @@ server.tool(
                 ],
             };
         } catch (err) {
-            console.error('Error executing query:', err);
+            logger.error('Error executing query: ' + err);
             throw err;
-        } finally {
-            if (pool) {
-                try {
-                    await pool.close();
-                } catch (err) {
-                    console.warn('Error closing connection:', err);
-                }
-            }
         }
     },
 );
@@ -239,26 +249,22 @@ server.tool(
             throw new Error("Script must end with a semicolon (;)");
         }
 
-        let pool;
         try {
-            console.log("Attempting to connect to SQL Server for script execution...");
-            pool = await mssql.connect(config);
-            console.log("Connected successfully!");
+            const pool = await getPool();
 
             let statements;
-            if (!disableValidation) {
+            if (enableValidation) {
                 if (debugSql) {
-                    console.log("🐛 DEBUG: Validating script...");
+                    logger.info("🐛 DEBUG: Validating script...");
                 }
                 statements = await validateScript(sqlScript, pool);
                 if (debugSql) {
-                    console.log(`🐛 DEBUG: Script contains ${statements.length} statements`);
+                    logger.info(`🐛 DEBUG: Script contains ${statements.length} statements`);
                 }
             } else {
-                // When validation is disabled, just split by semicolons
                 statements = sqlScript.split(';').map(s => s.trim()).filter(s => s.length > 0);
                 if (debugSql) {
-                    console.log(`🐛 DEBUG: Script contains ${statements.length} statements (validation disabled)`);
+                    logger.info(`🐛 DEBUG: Script contains ${statements.length} statements (validation disabled)`);
                 }
             }
 
@@ -268,8 +274,8 @@ server.tool(
                 const stmt = statements[i];
                 
                 if (debugSql) {
-                    console.log(`🐛 DEBUG: Executing statement ${i + 1}/${statements.length}:`);
-                    console.log(stmt);
+                    logger.info(`🐛 DEBUG: Executing statement ${i + 1}/${statements.length}:`);
+                    logger.info(stmt);
                 }
 
                 const isSelect = stmt.trim().toLowerCase().startsWith("select");
@@ -280,23 +286,23 @@ server.tool(
                     if (isSelect) {
                         results.push(result.recordset);
                         if (debugSql) {
-                            console.log(`🐛 DEBUG: Statement ${i + 1} response - returned ${result.recordset.length} rows:`);
-                            console.log(JSON.stringify(result.recordset, null, 2));
+                            logger.info(`🐛 DEBUG: Statement ${i + 1} response - returned ${result.recordset.length} rows:`);
+                            logger.info(JSON.stringify(result.recordset, null, 2));
                         }
                     } else {
                         results.push({ rowsAffected: result.rowsAffected });
                         if (debugSql) {
-                            console.log(`🐛 DEBUG: Statement ${i + 1} response - affected ${result.rowsAffected} rows`);
+                            logger.info(`🐛 DEBUG: Statement ${i + 1} response - affected ${result.rowsAffected} rows`);
                         }
                     }
                 } catch (execError) {
-                    console.error(`Error executing statement ${i + 1}:`, execError.message);
-                    console.error(`Failed statement:`, stmt);
+                    logger.error(`Error executing statement ${i + 1}: ${execError.message}`);
+                    logger.error(`Failed statement: ${stmt}`);
                     throw new Error(`Error in statement ${i + 1}: ${execError.message}\nFailed SQL: ${stmt}`);
                 }
             }
 
-            console.log("Script execution completed successfully");
+            logger.info("Script execution completed successfully");
             return {
                 content: [
                     {
@@ -306,17 +312,8 @@ server.tool(
                 ],
             };
         } catch (err) {
-            console.error('Error executing script:', err);
+            logger.error('Error executing script: ' + err);
             throw err;
-        } finally {
-            if (pool) {
-                try {
-                    await pool.close();
-                    console.log("Database connection closed");
-                } catch (err) {
-                    console.error('Error closing connection:', err);
-                }
-            }
         }
     },
 );
@@ -324,12 +321,28 @@ server.tool(
 async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error("MSSQL Server running on stdio");
+    logger.error("MSSQL Server running on stdio");
 }
+
+process.on('SIGINT', async () => {
+    logger.info('Received SIGINT, closing connection pool...');
+    if (globalPool) {
+        await globalPool.close();
+    }
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    logger.info('Received SIGTERM, closing connection pool...');
+    if (globalPool) {
+        await globalPool.close();
+    }
+    process.exit(0);
+});
 
 export { server };
 
 main().catch((error) => {
-    console.error("Fatal error in main():", error);
+    logger.error("Fatal error in main(): " + error);
     process.exit(1);
 });

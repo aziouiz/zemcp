@@ -25,30 +25,22 @@ npm install -g zemcp-oracle
 
 ### Usage
 
-#### Microsoft SQL Server
+Both servers are configured via environment variables. See individual package documentation for detailed configuration:
+
+- **[zemcp-mssql Configuration](./zemcp-mssql#configuration)** - Microsoft SQL Server setup
+- **[zemcp-oracle Configuration](./zemcp-oracle#configuration)** - Oracle Database setup
+
+**Basic Examples:**
 
 ```bash
-zemcp-mssql
+# Microsoft SQL Server
+export DB_HOST=localhost DB_PORT=1433 DB_NAME=mydb DB_USER=sa DB_PASSWORD=mypass
+npx zemcp-mssql
+
+# Oracle Database  
+export DB_USER=sys DB_PASSWORD=mypass DB_CONNECT_STRING=localhost:1521/XEPDB1
+npx zemcp-oracle
 ```
-
-Environment variables:
-- `DB_HOST` - Database host (default: localhost)
-- `DB_PORT` - Database port (default: 1433)
-- `DB_NAME` - Database name
-- `DB_USER` - Database username
-- `DB_PASSWORD` - Database password
-
-#### Oracle Database
-
-```bash
-zemcp-oracle
-```
-
-Environment variables:
-- `DB_USER` - Database username
-- `DB_PASSWORD` - Database password
-- `DB_CONNECT_STRING` - Oracle connection string (e.g., localhost:1521/XEPDB1)
-- `DB_PRIVILEGE` - Database privilege (optional, e.g., SYSDBA)
 
 ## 🛠️ Development
 
@@ -98,60 +90,21 @@ Both servers provide the following MCP tools:
 
 ### Security Features
 
-- Input validation using Zod schemas
+- Input validation (when enabled)
 - Parameterized queries to prevent SQL injection
 - Environment-based configuration
 - Read-only and write operations clearly separated
+- Optional dangerous operation detection (disabled by default for performance)
 
-## 🔧 Configuration
+## 🔧 MCP Client Integration
 
-### VS Code MCP Configuration
+These servers are designed to work with MCP-compatible clients like VS Code's MCP extension.
 
-Create or update your MCP configuration file (usually `.vscode/mcp.json`):
+**Configuration**: Each server provides specific MCP configuration examples in their respective documentation:
+- **[zemcp-mssql MCP Configuration](./zemcp-mssql#mcp-client-configuration)** - VS Code setup for SQL Server
+- **[zemcp-oracle MCP Configuration](./zemcp-oracle#mcp-client-configuration)** - VS Code setup for Oracle Database
 
-```json
-{
-  "inputs": [
-    {
-      "id": "oracle-password",
-      "type": "promptString", 
-      "description": "Oracle DB Password",
-      "password": true
-    },
-    {
-      "id": "mssql-password",
-      "type": "promptString",
-      "description": "MSSQL DB Password", 
-      "password": true
-    }
-  ],
-  "servers": {
-    "zemcp-oracle": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["zemcp-oracle"],
-      "env": {
-        "DB_USER": "sys",
-        "DB_PASSWORD": "${input:oracle-password}",
-        "DB_CONNECT_STRING": "localhost:1521/XEPDB1",
-        "DB_PRIVILEGE": "SYSDBA"
-      }
-    },
-    "zemcp-mssql": {
-      "type": "stdio", 
-      "command": "npx",
-      "args": ["zemcp-mssql"],
-      "env": {
-        "DB_HOST": "localhost",
-        "DB_PORT": "1433",
-        "DB_NAME": "master",
-        "DB_USER": "sa",
-        "DB_PASSWORD": "${input:mssql-password}"
-      }
-    }
-  }
-}
-```
+**Quick Setup**: Use `npx zemcp-mssql` or `npx zemcp-oracle` as the command in your MCP client configuration.
 
 ## 🚢 Deployment
 

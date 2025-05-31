@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import oracledb from "oracledb";
+import pino from "pino";
 
 const server = new McpServer({
     name: "zemcp-oracle",
@@ -16,22 +17,33 @@ const server = new McpServer({
 const user = process.env.DB_USER;
 const password = process.env.DB_PASSWORD;
 const connectString = process.env.DB_CONNECT_STRING;
-const disableValidation = process.env.DISABLE_VALIDATION === 'true';
+const enableValidation = process.env.ENABLE_VALIDATION === 'true';
 const debugSql = process.env.DEBUG_SQL === 'true';
+const logFile = process.env.LOG_FILE;
+
+const streams = [{ stream: process.stdout }];
+if (logFile) {
+    streams.push({ stream: pino.destination(logFile) });
+}
+const logger = pino({ level: 'info' }, pino.multistream(streams));
 
 if (!connectString || !user || !password) {
-    console.error("Missing required environment variables: DB_CONNECT_STRING, DB_USER, DB_PASSWORD");
+    logger.error("Missing required environment variables: DB_CONNECT_STRING, DB_USER, DB_PASSWORD");
     process.exit(1);
 }
 
-if (disableValidation) {
-    console.warn("⚠️  WARNING: SQL validation is DISABLED. Dangerous operations are allowed!");
+if (logFile) {
+    logger.info(`📝 File logging enabled: ${logFile}`);
+}
+
+if (enableValidation) {
+    logger.info("✅ SQL validation is enabled for safety");
 } else {
-    console.log("✅ SQL validation is enabled for safety");
+    logger.warn("⚠️  WARNING: SQL validation is DISABLED by default. Set ENABLE_VALIDATION=true to enable safety checks!");
 }
 
 if (debugSql) {
-    console.log("🐛 DEBUG_SQL is enabled - SQL requests and responses will be logged");
+    logger.info("🐛 DEBUG_SQL is enabled - SQL requests and responses will be logged");
 }
 
 function parsePrivilege(privilegeString) {
@@ -58,12 +70,33 @@ function parsePrivilege(privilegeString) {
         case "":
             return undefined;
         default:
-            console.warn(`Unknown privilege: ${privilegeString}. Available privileges: SYSDBA, SYSOPER, SYSASM, SYSBACKUP, SYSDG, SYSKM, SYSRAC, or NONE`);
+            logger.warn(`Unknown privilege: ${privilegeString}. Available privileges: SYSDBA, SYSOPER, SYSASM, SYSBACKUP, SYSDG, SYSKM, SYSRAC, or NONE`);
             return undefined;
     }
 }
 
 const privilege = parsePrivilege(process.env.DB_PRIVILEGE);
+
+let globalPool = null;
+
+async function getConnection() {
+    if (!globalPool) {
+        logger.info("Creating connection pool...");
+        globalPool = await oracledb.createPool({
+            user,
+            password,
+            connectString,
+            privilege,
+            poolMin: parseInt(process.env.DB_POOL_MIN) || 2,
+            poolMax: parseInt(process.env.DB_POOL_MAX) || 10,
+            poolIncrement: parseInt(process.env.DB_POOL_INCREMENT) || 1,
+            poolTimeout: parseInt(process.env.DB_POOL_TIMEOUT) || 60,
+            queueTimeout: parseInt(process.env.DB_POOL_QUEUE_TIMEOUT) || 60000
+        });
+        logger.info("Connection pool created successfully!");
+    }
+    return await globalPool.getConnection();
+}
 
 const DANGEROUS_PATTERNS = [
     /\bDROP\s+DATABASE\b/i,
@@ -111,7 +144,7 @@ async function validateSqlSyntax(sql, connection) {
             if (explainError.message.includes('ORA-00900') ||
                 explainError.message.includes('ORA-00942') ||
                 explainError.message.includes('ORA-00904')) {
-                console.warn('Syntax validation warning:', explainError.message);
+                logger.warn('Syntax validation warning: ' + explainError.message);
             }
         }
     }
@@ -189,21 +222,16 @@ server.tool(
         const queryWithoutSemiColumn = query.trim().slice(0, -1);
 
         if (debugSql) {
-            console.log("🐛 DEBUG: Received Oracle SQL query:");
-            console.log(queryWithoutSemiColumn);
+            logger.info("🐛 DEBUG: Received Oracle SQL query:");
+            logger.info(queryWithoutSemiColumn);
         }
 
         let connection;
 
         try {
-            connection = await oracledb.getConnection({
-                user,
-                password,
-                connectString,
-                privilege,
-            });
+            connection = await getConnection();
 
-            if (!disableValidation) {
+            if (enableValidation) {
                 await validateQuery(queryWithoutSemiColumn, connection);
             }
 
@@ -215,8 +243,8 @@ server.tool(
             const resultString = JSON.stringify(result, null, 2);
             
             if (debugSql) {
-                console.log("🐛 DEBUG: Oracle query response:");
-                console.log(resultString);
+                logger.info("🐛 DEBUG: Oracle query response:");
+                logger.info(resultString);
             }
 
             return {
@@ -229,14 +257,14 @@ server.tool(
             };
 
         } catch (err) {
-            console.error('Error executing query:', err);
+            logger.error('Error executing query: ' + err);
             throw err;
         } finally {
             if (connection) {
                 try {
                     await connection.close();
                 } catch (err) {
-                    console.error('Error closing connection:', err);
+                    logger.error('Error closing connection: ' + err);
                 }
             }
         }
@@ -261,27 +289,21 @@ server.tool(
         let connection;
 
         try {
-            connection = await oracledb.getConnection({
-                user,
-                password,
-                connectString,
-                privilege,
-            });
+            connection = await getConnection();
 
             let statements;
-            if (!disableValidation) {
+            if (enableValidation) {
                 if (debugSql) {
-                    console.log("🐛 DEBUG: Validating Oracle script...");
+                    logger.info("🐛 DEBUG: Validating Oracle script...");
                 }
                 statements = await validateScript(sqlScript, connection);
                 if (debugSql) {
-                    console.log(`🐛 DEBUG: Script contains ${statements.length} statements`);
+                    logger.info(`🐛 DEBUG: Script contains ${statements.length} statements`);
                 }
             } else {
-                // When validation is disabled, just split by semicolons
                 statements = sqlScript.split(';').map(s => s.trim()).filter(s => s.length > 0);
                 if (debugSql) {
-                    console.log(`🐛 DEBUG: Script contains ${statements.length} statements (validation disabled)`);
+                    logger.info(`🐛 DEBUG: Script contains ${statements.length} statements (validation disabled)`);
                 }
             }
 
@@ -291,8 +313,8 @@ server.tool(
                 const stmt = statements[i];
                 
                 if (debugSql) {
-                    console.log(`🐛 DEBUG: Executing Oracle statement ${i + 1}/${statements.length}:`);
-                    console.log(stmt);
+                    logger.info(`🐛 DEBUG: Executing Oracle statement ${i + 1}/${statements.length}:`);
+                    logger.info(stmt);
                 }
 
                 const isSelect = stmt.trim().toLowerCase().startsWith("select");
@@ -310,23 +332,23 @@ server.tool(
                     if (isSelect) {
                         results.push(result.rows);
                         if (debugSql) {
-                            console.log(`🐛 DEBUG: Statement ${i + 1} response - returned ${result.rows.length} rows:`);
-                            console.log(JSON.stringify(result.rows, null, 2));
+                            logger.info(`🐛 DEBUG: Statement ${i + 1} response - returned ${result.rows.length} rows:`);
+                            logger.info(JSON.stringify(result.rows, null, 2));
                         }
                     } else {
                         results.push({ rowsAffected: result.rowsAffected });
                         if (debugSql) {
-                            console.log(`🐛 DEBUG: Statement ${i + 1} response - affected ${result.rowsAffected} rows`);
+                            logger.info(`🐛 DEBUG: Statement ${i + 1} response - affected ${result.rowsAffected} rows`);
                         }
                     }
                 } catch (execError) {
-                    console.error(`Error executing statement ${i + 1}:`, execError.message);
-                    console.error(`Failed statement:`, stmt);
+                    logger.error(`Error executing statement ${i + 1}: ${execError.message}`);
+                    logger.error(`Failed statement: ${stmt}`);
                     throw new Error(`Error in statement ${i + 1}: ${execError.message}\nFailed SQL: ${stmt}`);
                 }
             }
 
-            console.log("Script execution completed successfully");
+            logger.info("Script execution completed successfully");
             return {
                 content: [
                     {
@@ -337,15 +359,15 @@ server.tool(
             };
 
         } catch (err) {
-            console.error('Error executing script:', err);
+            logger.error('Error executing script: ' + err);
             throw err;
         } finally {
             if (connection) {
                 try {
                     await connection.close();
-                    console.log("Database connection closed");
+                    logger.info("Database connection closed");
                 } catch (err) {
-                    console.error('Error closing connection:', err);
+                    logger.error('Error closing connection: ' + err);
                 }
             }
         }
@@ -355,12 +377,28 @@ server.tool(
 async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error("oracle Server running on stdio");
+    logger.error("Oracle Server running on stdio");
 }
+
+process.on('SIGINT', async () => {
+    logger.info('Received SIGINT, closing connection pool...');
+    if (globalPool) {
+        await globalPool.close();
+    }
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    logger.info('Received SIGTERM, closing connection pool...');
+    if (globalPool) {
+        await globalPool.close();
+    }
+    process.exit(0);
+});
 
 export { server };
 
 main().catch((error) => {
-    console.error("Fatal error in main():", error);
+    logger.error("Fatal error in main(): " + error);
     process.exit(1);
 });
