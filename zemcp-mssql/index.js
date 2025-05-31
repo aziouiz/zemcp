@@ -18,10 +18,24 @@ const user = process.env.DB_USER;
 const password = process.env.DB_PASSWORD;
 const port = parseInt(process.env.DB_PORT);
 const database = process.env.DB_NAME;
+const disableValidation = process.env.DISABLE_VALIDATION === 'true';
+const debugSql = process.env.DEBUG_SQL === 'true';
 
 if (!serverHost || !user || !password || !port || !database) {
     console.error("Missing required environment variables: DB_HOST, DB_USER, DB_PASSWORD, DB_PORT, DB_NAME");
     process.exit(1);
+}
+
+// Log validation status on startup
+if (disableValidation) {
+    console.warn("⚠️  WARNING: SQL validation is DISABLED. Dangerous operations are allowed!");
+} else {
+    console.log("✅ SQL validation is enabled for safety");
+}
+
+// Log debug status on startup
+if (debugSql) {
+    console.log("🐛 DEBUG_SQL is enabled - SQL requests and responses will be logged");
 }
 
 const config = {
@@ -37,7 +51,10 @@ const config = {
     pool: {
         max: 5,
         min: 0,
-        idleTimeoutMillis: 30000,
+        idleTimeoutMillis: 60000,
+        acquireTimeoutMillis: 15000,
+        createTimeoutMillis: 15000,
+        destroyTimeoutMillis: 5000,
     },
 };
 
@@ -156,8 +173,10 @@ server.tool(
 
         const queryWithoutSemiColumn = query.trim().slice(0, -1);
 
-        console.log("Received sql query :");
-        console.log(queryWithoutSemiColumn);
+        if (debugSql) {
+            console.log("🐛 DEBUG: Received SQL query:");
+            console.log(queryWithoutSemiColumn);
+        }
 
         if (!queryWithoutSemiColumn) {
             throw new Error('Missing required parameters');
@@ -169,15 +188,18 @@ server.tool(
             pool = await mssql.connect(config);
             console.log("Connected successfully!");
 
-            await validateQuery(queryWithoutSemiColumn, pool);
+            if (!disableValidation) {
+                await validateQuery(queryWithoutSemiColumn, pool);
+            }
 
             const result = await pool.request().query(queryWithoutSemiColumn);
 
-            console.log("Result fetched");
-
             const resultString = JSON.stringify(result.recordset, null, 2);
-            console.log("MSSQL responded with :");
-            console.log(resultString);
+            
+            if (debugSql) {
+                console.log("🐛 DEBUG: MSSQL query response:");
+                console.log(resultString);
+            }
 
             return {
                 content: [
@@ -223,15 +245,32 @@ server.tool(
             pool = await mssql.connect(config);
             console.log("Connected successfully!");
 
-            console.log("Validating script...");
-            const statements = await validateScript(sqlScript, pool);
-            console.log(`Script contains ${statements.length} statements`);
+            let statements;
+            if (!disableValidation) {
+                if (debugSql) {
+                    console.log("🐛 DEBUG: Validating script...");
+                }
+                statements = await validateScript(sqlScript, pool);
+                if (debugSql) {
+                    console.log(`🐛 DEBUG: Script contains ${statements.length} statements`);
+                }
+            } else {
+                // When validation is disabled, just split by semicolons
+                statements = sqlScript.split(';').map(s => s.trim()).filter(s => s.length > 0);
+                if (debugSql) {
+                    console.log(`🐛 DEBUG: Script contains ${statements.length} statements (validation disabled)`);
+                }
+            }
 
             const results = [];
 
             for (let i = 0; i < statements.length; i++) {
                 const stmt = statements[i];
-                console.log(`Executing statement ${i + 1}/${statements.length}:`, stmt.substring(0, 100) + (stmt.length > 100 ? '...' : ''));
+                
+                if (debugSql) {
+                    console.log(`🐛 DEBUG: Executing statement ${i + 1}/${statements.length}:`);
+                    console.log(stmt);
+                }
 
                 const isSelect = stmt.trim().toLowerCase().startsWith("select");
 
@@ -240,14 +279,20 @@ server.tool(
 
                     if (isSelect) {
                         results.push(result.recordset);
-                        console.log(`Statement ${i + 1} completed - returned ${result.recordset.length} rows`);
+                        if (debugSql) {
+                            console.log(`🐛 DEBUG: Statement ${i + 1} response - returned ${result.recordset.length} rows:`);
+                            console.log(JSON.stringify(result.recordset, null, 2));
+                        }
                     } else {
                         results.push({ rowsAffected: result.rowsAffected });
-                        console.log(`Statement ${i + 1} completed - affected ${result.rowsAffected} rows`);
+                        if (debugSql) {
+                            console.log(`🐛 DEBUG: Statement ${i + 1} response - affected ${result.rowsAffected} rows`);
+                        }
                     }
                 } catch (execError) {
                     console.error(`Error executing statement ${i + 1}:`, execError.message);
-                    throw new Error(`Error in statement ${i + 1}: ${execError.message}`);
+                    console.error(`Failed statement:`, stmt);
+                    throw new Error(`Error in statement ${i + 1}: ${execError.message}\nFailed SQL: ${stmt}`);
                 }
             }
 

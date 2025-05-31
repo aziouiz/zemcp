@@ -13,6 +13,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -23,6 +27,11 @@ jobs:
         run: |
           cd zemcp-mssql
           npm ci
+
+      - name: Update version for zemcp-mssql
+        run: |
+          cd zemcp-mssql
+          npm version ${{ steps.get_version.outputs.VERSION }} --no-git-tag-version
 
       - name: Build zemcp-mssql
         run: |
@@ -40,6 +49,11 @@ jobs:
         run: |
           cd zemcp-oracle
           npm ci
+
+      - name: Update version for zemcp-oracle
+        run: |
+          cd zemcp-oracle
+          npm version ${{ steps.get_version.outputs.VERSION }} --no-git-tag-version
 
       - name: Build zemcp-oracle
         run: |

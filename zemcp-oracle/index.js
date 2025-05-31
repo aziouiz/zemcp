@@ -16,10 +16,22 @@ const server = new McpServer({
 const user = process.env.DB_USER;
 const password = process.env.DB_PASSWORD;
 const connectString = process.env.DB_CONNECT_STRING;
+const disableValidation = process.env.DISABLE_VALIDATION === 'true';
+const debugSql = process.env.DEBUG_SQL === 'true';
 
 if (!connectString || !user || !password) {
     console.error("Missing required environment variables: DB_CONNECT_STRING, DB_USER, DB_PASSWORD");
     process.exit(1);
+}
+
+if (disableValidation) {
+    console.warn("⚠️  WARNING: SQL validation is DISABLED. Dangerous operations are allowed!");
+} else {
+    console.log("✅ SQL validation is enabled for safety");
+}
+
+if (debugSql) {
+    console.log("🐛 DEBUG_SQL is enabled - SQL requests and responses will be logged");
 }
 
 function parsePrivilege(privilegeString) {
@@ -176,8 +188,10 @@ server.tool(
 
         const queryWithoutSemiColumn = query.trim().slice(0, -1);
 
-        console.log("Received sql query :");
-        console.log(queryWithoutSemiColumn);
+        if (debugSql) {
+            console.log("🐛 DEBUG: Received Oracle SQL query:");
+            console.log(queryWithoutSemiColumn);
+        }
 
         let connection;
 
@@ -189,18 +203,21 @@ server.tool(
                 privilege,
             });
 
-            await validateQuery(queryWithoutSemiColumn, connection);
+            if (!disableValidation) {
+                await validateQuery(queryWithoutSemiColumn, connection);
+            }
 
             const result = await connection.execute(queryWithoutSemiColumn, [], {
                 autoCommit: true,
                 outFormat: oracledb.OUT_FORMAT_OBJECT,
             });
 
-            console.log("Result fetched");
-
             const resultString = JSON.stringify(result, null, 2);
-            console.log("Oracle responded with :");
-            console.log(resultString);
+            
+            if (debugSql) {
+                console.log("🐛 DEBUG: Oracle query response:");
+                console.log(resultString);
+            }
 
             return {
                 content: [
@@ -251,15 +268,32 @@ server.tool(
                 privilege,
             });
 
-            console.log("Validating script...");
-            const statements = await validateScript(sqlScript, connection);
-            console.log(`Script contains ${statements.length} statements`);
+            let statements;
+            if (!disableValidation) {
+                if (debugSql) {
+                    console.log("🐛 DEBUG: Validating Oracle script...");
+                }
+                statements = await validateScript(sqlScript, connection);
+                if (debugSql) {
+                    console.log(`🐛 DEBUG: Script contains ${statements.length} statements`);
+                }
+            } else {
+                // When validation is disabled, just split by semicolons
+                statements = sqlScript.split(';').map(s => s.trim()).filter(s => s.length > 0);
+                if (debugSql) {
+                    console.log(`🐛 DEBUG: Script contains ${statements.length} statements (validation disabled)`);
+                }
+            }
 
             const results = [];
 
             for (let i = 0; i < statements.length; i++) {
                 const stmt = statements[i];
-                console.log(`Executing statement ${i + 1}/${statements.length}:`, stmt.substring(0, 100) + (stmt.length > 100 ? '...' : ''));
+                
+                if (debugSql) {
+                    console.log(`🐛 DEBUG: Executing Oracle statement ${i + 1}/${statements.length}:`);
+                    console.log(stmt);
+                }
 
                 const isSelect = stmt.trim().toLowerCase().startsWith("select");
 
@@ -275,14 +309,20 @@ server.tool(
 
                     if (isSelect) {
                         results.push(result.rows);
-                        console.log(`Statement ${i + 1} completed - returned ${result.rows.length} rows`);
+                        if (debugSql) {
+                            console.log(`🐛 DEBUG: Statement ${i + 1} response - returned ${result.rows.length} rows:`);
+                            console.log(JSON.stringify(result.rows, null, 2));
+                        }
                     } else {
                         results.push({ rowsAffected: result.rowsAffected });
-                        console.log(`Statement ${i + 1} completed - affected ${result.rowsAffected} rows`);
+                        if (debugSql) {
+                            console.log(`🐛 DEBUG: Statement ${i + 1} response - affected ${result.rowsAffected} rows`);
+                        }
                     }
                 } catch (execError) {
                     console.error(`Error executing statement ${i + 1}:`, execError.message);
-                    throw new Error(`Error in statement ${i + 1}: ${execError.message}`);
+                    console.error(`Failed statement:`, stmt);
+                    throw new Error(`Error in statement ${i + 1}: ${execError.message}\nFailed SQL: ${stmt}`);
                 }
             }
 
