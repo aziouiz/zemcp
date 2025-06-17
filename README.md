@@ -4,10 +4,11 @@ A collection of Model Context Protocol (MCP) servers for database interactions, 
 
 ## 📦 Packages
 
-This monorepo contains two npm packages:
+This monorepo contains three npm packages:
 
 - **[zemcp-mssql](./zemcp-mssql)** - MCP server for Microsoft SQL Server
 - **[zemcp-oracle](./zemcp-oracle)** - MCP server for Oracle Database
+- **[zemcp-postgres](./zemcp-postgres)** - MCP server for PostgreSQL
 
 ## 🚀 Quick Start
 
@@ -15,12 +16,14 @@ This monorepo contains two npm packages:
 
 ```bash
 # No installation required! Use npx to run directly:
-npx zemcp-mssql
-npx zemcp-oracle
+npx @zemcp/mssql
+npx @zemcp/oracle
+npx @zemcp/postgres
 
 # Or install globally if preferred:
-npm install -g zemcp-mssql
-npm install -g zemcp-oracle
+npm install -g @zemcp/mssql
+npm install -g @zemcp/oracle
+npm install -g @zemcp/postgres
 ```
 
 ### Usage
@@ -29,17 +32,22 @@ Both servers are configured via environment variables. See individual package do
 
 - **[zemcp-mssql Configuration](./zemcp-mssql#configuration)** - Microsoft SQL Server setup
 - **[zemcp-oracle Configuration](./zemcp-oracle#configuration)** - Oracle Database setup
+- **[zemcp-postgres Configuration](./zemcp-postgres#configuration)** - PostgreSQL setup
 
 **Basic Examples:**
 
 ```bash
 # Microsoft SQL Server
 export DB_HOST=localhost DB_PORT=1433 DB_NAME=mydb DB_USER=sa DB_PASSWORD=mypass
-npx zemcp-mssql
+npx @zemcp/mssql
 
 # Oracle Database  
 export DB_USER=sys DB_PASSWORD=mypass DB_CONNECT_STRING=localhost:1521/XEPDB1
-npx zemcp-oracle
+npx @zemcp/oracle
+
+# PostgreSQL
+export DB_HOST=localhost DB_PORT=5432 DB_NAME=mydb DB_USER=postgres DB_PASSWORD=mypass
+npx @zemcp/postgres
 ```
 
 ## 🛠️ Development
@@ -76,6 +84,10 @@ zemcp/
 │   ├── index.js          # Main server code
 │   ├── package.json      # Package configuration
 │   └── tsconfig.json     # TypeScript config
+├── zemcp-postgres/       # PostgreSQL MCP Server
+│   ├── index.js          # Main server code
+│   ├── package.json      # Package configuration
+│   └── tsconfig.json     # TypeScript config
 ├── .github/workflows/    # GitHub Actions
 ├── docker-compose.yml    # Development databases
 └── mcp.sample.json       # MCP configuration example
@@ -83,7 +95,7 @@ zemcp/
 
 ## 📋 Available Tools
 
-Both servers provide the following MCP tools:
+All servers provide the following MCP tools:
 
 - **execute-query** - Execute SELECT queries safely
 - **execute-script** - Execute multiple SQL statements (INSERT, UPDATE, DELETE, DDL)
@@ -103,8 +115,9 @@ These servers are designed to work with MCP-compatible clients like VS Code's MC
 **Configuration**: Each server provides specific MCP configuration examples in their respective documentation:
 - **[zemcp-mssql MCP Configuration](./zemcp-mssql#mcp-client-configuration)** - VS Code setup for SQL Server
 - **[zemcp-oracle MCP Configuration](./zemcp-oracle#mcp-client-configuration)** - VS Code setup for Oracle Database
+- **[zemcp-postgres MCP Configuration](./zemcp-postgres#mcp-client-configuration)** - VS Code setup for PostgreSQL
 
-**Quick Setup**: Use `npx zemcp-mssql` or `npx zemcp-oracle` as the command in your MCP client configuration.
+**Quick Setup**: Use `npx @zemcp/mssql`, `npx @zemcp/oracle`, or `npx @zemcp/postgres` as the command in your MCP client configuration.
 
 ## 🚢 Deployment
 
@@ -154,6 +167,18 @@ docker-compose down
 This provides:
 - SQL Server 2022 on port 1433
 - Oracle XE 21c on port 1521
+- PostgreSQL 17.5 on port 5432
+- A proxy that proxies the zemcp-mssql stdio server as OpenApi compatible to be used in the Open WebUI console
+
+if you are using the Open WebUI console you will need to set your open api key in a .env file (copy .env.example). otherwise if you have a good GPU use Ollama!
+
+
+## Open WebUi Console
+Once you start your containers with docker-compose up -d you can then navigate to the console on http://localhost:3000 and configure in Settings > Tools > url = http://localhost:8000 leave default openapi.json path.
+Then you are good to go, choose your favorite model and query with stuff like:
+```
+   Show Your Magic And Do Performance Check On All My DBs
+```
 
 ## 🤝 Contributing
 

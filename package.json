@@ -5,7 +5,8 @@
   "private": true,
   "workspaces": [
     "zemcp-mssql",
-    "zemcp-oracle"
+    "zemcp-oracle",
+    "zemcp-postgres"
   ],
   "scripts": {
     "build": "npm run build --workspaces",
@@ -18,7 +19,9 @@
     "model-context-protocol",
     "database",
     "mssql",
-    "oracle"
+    "oracle",
+    "postgres",
+    "postgresql"
   ],
   "author": "",
   "license": "MIT",

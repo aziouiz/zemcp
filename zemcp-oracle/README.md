@@ -6,20 +6,20 @@ Model Context Protocol server for Oracle Database interactions.
 
 ```bash
 # No installation required! Use npx:
-npx zemcp-oracle
+npx @zemcp/oracle
 
 # Or install globally:
-npm install -g zemcp-oracle
+npm install -g @zemcp/oracle
 ```
 
 ## Usage
 
 ```bash
 # Using npx (recommended):
-npx zemcp-oracle
+npx @zemcp/oracle
 
 # Or if installed globally:
-zemcp-oracle
+@zemcp/oracle
 ```
 
 ## Configuration
@@ -76,7 +76,7 @@ When set to `true`, enables SQL validation including dangerous operation detecti
 
 ```bash
 export ENABLE_VALIDATION=true
-npx zemcp-oracle
+npx @zemcp/oracle
 ```
 
 ⚠️ **Note**: Validation is DISABLED by default for performance. Enable it to prevent potentially dangerous operations like `DROP DATABASE`, `SHUTDOWN`, etc.
@@ -86,7 +86,7 @@ When set to `true`, logs all SQL requests and responses for debugging:
 
 ```bash
 export DEBUG_SQL=true
-npx zemcp-oracle
+npx @zemcp/oracle
 ```
 
 Useful for troubleshooting, performance analysis, and development.
@@ -96,7 +96,7 @@ When set to an absolute file path, logs all output to both console and the speci
 
 ```bash
 export LOG_FILE=/var/log/oracle-mcp.log
-npx zemcp-oracle
+npx @zemcp/oracle
 ```
 
 The log file will contain timestamped JSON entries from Pino logger. Useful for production monitoring and audit trails.
@@ -111,7 +111,7 @@ export DB_POOL_MAX=50
 export DB_POOL_INCREMENT=2
 export DB_POOL_TIMEOUT=120
 export DB_POOL_QUEUE_TIMEOUT=30000
-npx zemcp-oracle
+npx @zemcp/oracle
 ```
 
 ```bash
@@ -121,7 +121,7 @@ export DB_POOL_MAX=5
 export DB_POOL_INCREMENT=1
 export DB_POOL_TIMEOUT=30
 export DB_POOL_QUEUE_TIMEOUT=15000
-npx zemcp-oracle
+npx @zemcp/oracle
 ```
 
 **Oracle Pool Configuration Guidelines:**
@@ -157,7 +157,7 @@ To use this server with VS Code's MCP support, create or update `.vscode/mcp.jso
     "zemcp-oracle": {
       "type": "stdio",
       "command": "npx",
-      "args": ["zemcp-oracle"],
+      "args": ["@zemcp/oracle"],
       "env": {
         "DB_USER": "sys",
         "DB_PASSWORD": "${input:oracle-password}",
@@ -187,7 +187,7 @@ For production deployments with custom settings:
     "zemcp-oracle": {
       "type": "stdio",
       "command": "npx",
-      "args": ["zemcp-oracle"],
+      "args": ["@zemcp/oracle"],
       "env": {
         "DB_USER": "your_username",
         "DB_PASSWORD": "${input:oracle-password}",

@@ -1,0 +1,42 @@
+{
+  "name": "@zemcp/postgres",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "zemcp-postgres": "build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node index.js"
+  },
+  "files": [
+    "build"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "postgres",
+    "postgresql",
+    "database"
+  ],
+  "author": "",
+  "license": "MIT",
+  "description": "Model Context Protocol server for PostgreSQL database interactions",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aziouiz/zemcp.git",
+    "directory": "zemcp-postgres"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "pg": "^8.12.0",
+    "pino": "^9.7.0",
+    "zod": "^3.25.36"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.24",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.8.3"
+  }
+}

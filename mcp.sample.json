@@ -11,6 +11,12 @@
             "type": "promptString",
             "description": "MSSQL DB Password",
             "password": true
+        },
+        {
+            "id": "postgres-password",
+            "type": "promptString",
+            "description": "PostgreSQL DB Password",
+            "password": true
         }
     ],
     "servers": {
@@ -35,6 +41,18 @@
                 "DB_NAME" : "master",
                 "DB_USER" : "sa",
                 "DB_PASSWORD" : "${input:mssql-password}"
+            }
+        },
+        "zemcp-postgres": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["@zemcp/postgres"],
+            "env": {
+                "DB_HOST": "localhost",
+                "DB_PORT": "5432",
+                "DB_NAME": "postgres",
+                "DB_USER": "postgres",
+                "DB_PASSWORD": "${input:postgres-password}"
             }
         }
     }

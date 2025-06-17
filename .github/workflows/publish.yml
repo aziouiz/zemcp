@@ -66,3 +66,25 @@ jobs:
           npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install dependencies for zemcp-postgres
+        run: |
+          cd zemcp-postgres
+          npm ci
+
+      - name: Update version for zemcp-postgres
+        run: |
+          cd zemcp-postgres
+          npm version ${{ steps.get_version.outputs.VERSION }} --no-git-tag-version
+
+      - name: Build zemcp-postgres
+        run: |
+          cd zemcp-postgres
+          npm run build
+
+      - name: Publish zemcp-postgres to NPM
+        run: |
+          cd zemcp-postgres
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

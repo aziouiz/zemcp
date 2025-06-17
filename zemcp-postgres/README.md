@@ -1,25 +1,25 @@
-# ZeMCP MSSQL Server
+# ZeMCP PostgreSQL Server
 
-Model Context Protocol server for Microsoft SQL Server database interactions.
+Model Context Protocol server for PostgreSQL database interactions.
 
 ## Installation
 
 ```bash
 # No installation required! Use npx:
-npx @zemcp/mssql
+npx @zemcp/postgres
 
 # Or install globally:
-npm install -g @zemcp/mssql
+npm install -g @zemcp/postgres
 ```
 
 ## Usage
 
 ```bash
 # Using npx (recommended):
-npx @zemcp/mssql
+npx @zemcp/postgres
 
 # Or if installed globally:
-@zemcp/mssql
+zemcp-postgres
 ```
 
 ## Configuration
@@ -28,7 +28,7 @@ Set the following environment variables:
 
 ### Required
 - `DB_HOST` - Database host (default: localhost)
-- `DB_PORT` - Database port (default: 1433)
+- `DB_PORT` - Database port (default: 5432)
 - `DB_NAME` - Database name
 - `DB_USER` - Database username
 - `DB_PASSWORD` - Database password
@@ -42,13 +42,13 @@ Set the following environment variables:
 - `DB_POOL_MAX` - Maximum number of connections in pool (default: 10)
 - `DB_POOL_MIN` - Minimum number of connections in pool (default: 2)
 - `DB_POOL_IDLE_TIMEOUT` - Time in milliseconds before idle connections are closed (default: 30000)
-- `DB_POOL_ACQUIRE_TIMEOUT` - Time in milliseconds to wait for connection from pool (default: 15000)
-- `DB_POOL_CREATE_TIMEOUT` - Time in milliseconds to wait for new connection creation (default: 15000)
-- `DB_POOL_DESTROY_TIMEOUT` - Time in milliseconds to wait for connection destruction (default: 5000)
+- `DB_POOL_CONNECTION_TIMEOUT` - Time in milliseconds to wait for new connection creation (default: 15000)
+- `DB_STATEMENT_TIMEOUT` - Time in milliseconds before a statement times out (default: 30000)
+- `DB_QUERY_TIMEOUT` - Time in milliseconds before a query times out (default: 30000)
 
 ## MCP Tools
 
-### execute-mssql-query
+### execute-postgres-query
 Execute SELECT queries safely.
 
 **Parameters:**
@@ -56,10 +56,10 @@ Execute SELECT queries safely.
 
 **Example:**
 ```sql
-SELECT name FROM sys.tables;
+SELECT tablename FROM pg_tables;
 ```
 
-### execute-mssql-script
+### execute-postgres-script
 Execute multiple SQL statements (INSERT, UPDATE, DELETE, DDL).
 
 **Parameters:**
@@ -67,8 +67,8 @@ Execute multiple SQL statements (INSERT, UPDATE, DELETE, DDL).
 
 **Example:**
 ```sql
-CREATE TABLE test_table (id INT, name NVARCHAR(100));
-INSERT INTO test_table (id, name) VALUES (1, 'Alice');
+CREATE TABLE test_table (id SERIAL PRIMARY KEY, name VARCHAR(100));
+INSERT INTO test_table (name) VALUES ('Alice');
 ```
 
 ## Environment Variable Usage
@@ -78,17 +78,17 @@ When set to `true`, enables SQL validation including dangerous operation detecti
 
 ```bash
 export ENABLE_VALIDATION=true
-npx @zemcp/mssql
+npx @zemcp/postgres
 ```
 
-⚠️ **Note**: Validation is DISABLED by default for performance. Enable it to prevent potentially dangerous operations like `DROP DATABASE`, `SHUTDOWN`, etc.
+⚠️ **Note**: Validation is DISABLED by default for performance. Enable it to prevent potentially dangerous operations like `DROP DATABASE`, `CREATE DATABASE`, file operations, etc.
 
 ### DEBUG_SQL
 When set to `true`, logs all SQL requests and responses for debugging:
 
 ```bash
 export DEBUG_SQL=true
-npx @zemcp/mssql
+npx @zemcp/postgres
 ```
 
 Useful for troubleshooting, performance analysis, and development.
@@ -97,8 +97,8 @@ Useful for troubleshooting, performance analysis, and development.
 When set to an absolute file path, logs all output to both console and the specified file:
 
 ```bash
-export LOG_FILE=/var/log/mssql-mcp.log
-npx @zemcp/mssql
+export LOG_FILE=/var/log/postgres-mcp.log
+npx @zemcp/postgres
 ```
 
 The log file will contain timestamped JSON entries from Pino logger. Useful for production monitoring and audit trails.
@@ -111,7 +111,8 @@ Optimize database performance by configuring connection pool settings:
 export DB_POOL_MAX=50
 export DB_POOL_MIN=10
 export DB_POOL_IDLE_TIMEOUT=60000
-npx @zemcp/mssql
+export DB_POOL_CONNECTION_TIMEOUT=30000
+npx @zemcp/postgres
 ```
 
 ```bash
@@ -119,22 +120,31 @@ npx @zemcp/mssql
 export DB_POOL_MAX=5
 export DB_POOL_MIN=1
 export DB_POOL_IDLE_TIMEOUT=10000
-npx @zemcp/mssql
+export DB_POOL_CONNECTION_TIMEOUT=15000
+npx @zemcp/postgres
 ```
 
 **Pool Configuration Guidelines:**
-- **DB_POOL_MAX**: Set based on your database server's connection limits and expected concurrent load
+- **DB_POOL_MAX**: Set based on your PostgreSQL server's `max_connections` setting and expected concurrent load
 - **DB_POOL_MIN**: Keep at least 1-2 connections open for immediate availability
 - **DB_POOL_IDLE_TIMEOUT**: Lower values (10-30s) for development, higher (30-60s) for production
-- **DB_POOL_ACQUIRE_TIMEOUT**: Increase if experiencing timeout errors under load
-- **DB_POOL_CREATE_TIMEOUT**: Increase for slow network connections
-- **DB_POOL_DESTROY_TIMEOUT**: Usually keep default unless experiencing connection cleanup issues
+- **DB_POOL_CONNECTION_TIMEOUT**: Increase for slow network connections or overloaded servers
+- **DB_STATEMENT_TIMEOUT**: Prevent long-running queries from blocking the pool
+- **DB_QUERY_TIMEOUT**: Overall query timeout including network latency
+
+**PostgreSQL-Specific Considerations:**
+- PostgreSQL connections are relatively lightweight compared to Oracle
+- Default `max_connections` is usually 100, plan your pool size accordingly
+- Consider PostgreSQL's `shared_buffers` and `work_mem` settings for performance
+- Use connection pooling tools like PgBouncer for high-traffic applications
 
 ## Security
 
 - SQL query validation (can be enabled with ENABLE_VALIDATION)
 - Dangerous operation detection (can be enabled with ENABLE_VALIDATION)
 - Environment-based configuration
+- Transaction support for script execution
+- Protection against PostgreSQL-specific dangerous operations (file operations, external access)
 
 ## MCP Client Configuration
 
@@ -146,23 +156,23 @@ To use this server with VS Code's MCP support, create or update `.vscode/mcp.jso
 {
   "inputs": [
     {
-      "id": "mssql-password",
+      "id": "postgres-password",
       "type": "promptString",
-      "description": "MSSQL DB Password", 
+      "description": "PostgreSQL DB Password", 
       "password": true
     }
   ],
   "servers": {
-    "zemcp-mssql": {
+    "zemcp-postgres": {
       "type": "stdio", 
       "command": "npx",
-      "args": ["@zemcp/mssql"],
+      "args": ["@zemcp/postgres"],
       "env": {
         "DB_HOST": "localhost",
-        "DB_PORT": "1433",
-        "DB_NAME": "master",
-        "DB_USER": "sa",
-        "DB_PASSWORD": "${input:mssql-password}"
+        "DB_PORT": "5432",
+        "DB_NAME": "postgres",
+        "DB_USER": "postgres",
+        "DB_PASSWORD": "${input:postgres-password}"
       }
     }
   }
@@ -177,31 +187,61 @@ For production deployments with custom settings:
 {
   "inputs": [
     {
-      "id": "mssql-password",
+      "id": "postgres-password",
       "type": "promptString",
-      "description": "MSSQL DB Password", 
+      "description": "PostgreSQL DB Password", 
       "password": true
     }
   ],
   "servers": {
-    "zemcp-mssql": {
+    "zemcp-postgres": {
       "type": "stdio", 
       "command": "npx",
-      "args": ["zemcp-mssql"],
+      "args": ["@zemcp/postgres"],
       "env": {
-        "DB_HOST": "your-server.database.windows.net",
-        "DB_PORT": "1433",
+        "DB_HOST": "your-postgres-server.com",
+        "DB_PORT": "5432",
         "DB_NAME": "your_database",
         "DB_USER": "your_username",
-        "DB_PASSWORD": "${input:mssql-password}",
+        "DB_PASSWORD": "${input:postgres-password}",
         "ENABLE_VALIDATION": "true",
-        "LOG_FILE": "/var/log/mssql-mcp.log",
+        "LOG_FILE": "/var/log/postgres-mcp.log",
         "DB_POOL_MAX": "20",
-        "DB_POOL_MIN": "5"
+        "DB_POOL_MIN": "5",
+        "DB_STATEMENT_TIMEOUT": "60000"
       }
     }
   }
 }
+```
+
+## PostgreSQL Features
+
+### Dollar Quoting Support
+The server supports PostgreSQL's dollar quoting syntax for complex strings:
+
+```sql
+CREATE FUNCTION example() RETURNS text AS $$
+BEGIN
+    RETURN 'Hello, PostgreSQL!';
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### Transaction Management
+Scripts are executed within transactions, ensuring data consistency:
+- Automatic `BEGIN` at script start
+- `COMMIT` on successful completion
+- `ROLLBACK` on any error
+
+### Advanced Query Types
+Supports all PostgreSQL query types including:
+- Common Table Expressions (CTEs)
+- Window functions
+- JSON/JSONB operations
+- Array operations
+- Full-text search
+- Geometric data types
 
 ## License
 
